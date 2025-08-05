@@ -1,75 +1,87 @@
 package com.volia.example.courseservice.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-import com.volia.example.courseservice.dto.CourseResponse;
-import com.volia.example.courseservice.dto.CreateCourseRequest;
-import com.volia.example.courseservice.dto.UpdateCourseRequest;
+import com.volia.example.courseservice.dto.CourseDto;
 import com.volia.example.courseservice.model.Course;
 import com.volia.example.courseservice.repository.CourseRepository;
-import com.volia.example.courseservice.exception.NotFoundException;
+import com.volia.example.courseservice.exception.CourseNotFoundException;
+import com.volia.example.courseservice.mapper.CourseMapper;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class CourseService {
 
     private final CourseRepository courseRepository;
+    private final CourseMapper courseMapper;
 
-    public CourseResponse createCourse(CreateCourseRequest request) {
-        Course course = Course.builder()
-                .title(request.title())
-                .description(request.description())
-                .teacherId(request.teacherId())
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
-
+    public CourseDto createCourse(CourseDto courseDto) {
+        log.info("Creating course with title: {}", courseDto.title());
+        
+        Course course = courseMapper.fromDto(courseDto);
         Course saved = courseRepository.save(course);
-        return mapToResponse(saved);
+        log.info("Course created successfully with id: {}", saved.getId());
+        
+        return courseMapper.toDto(saved);
     }
 
-    public CourseResponse updateCourse(Long id, UpdateCourseRequest request) {
+    public CourseDto updateCourse(Long id, CourseDto courseDto) {
+        log.info("Updating course with id: {}", id);
+        
         Course course = courseRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Course not found"));
+                .orElseThrow(() -> new CourseNotFoundException(id));
 
-        course = Course.builder()
-                .id(course.getId())
-                .title(request.title())
-                .description(request.description())
-                .teacherId(course.getTeacherId())
-                .createdAt(course.getCreatedAt())
-                .updatedAt(LocalDateTime.now())
-                .build();
-
-        return mapToResponse(courseRepository.save(course));
+        courseMapper.updateFromDto(courseDto, course);
+        Course updated = courseRepository.save(course);
+        log.info("Course updated successfully with id: {}", updated.getId());
+        
+        return courseMapper.toDto(updated);
     }
 
-    public List<CourseResponse> getCoursesByTeacher(Long teacherId) {
-        return courseRepository.findByTeacherId(teacherId)
+    @Transactional(readOnly = true)
+    public List<CourseDto> getCoursesByTeacher(Long teacherId) {
+        log.info("Fetching courses for teacher id: {}", teacherId);
+        
+        List<CourseDto> courses = courseRepository.findByTeacherId(teacherId)
                 .stream()
-                .map(this::mapToResponse)
+                .map(courseMapper::toDto)
                 .toList();
+                
+        log.info("Found {} courses for teacher id: {}", courses.size(), teacherId);
+        return courses;
     }
 
-    public List<CourseResponse> getAllCourses() {
-        return courseRepository.findAll()
+    @Transactional(readOnly = true)
+    public CourseDto getCourseById(Long id) {
+        log.info("Fetching course with id: {}", id);
+        
+        Course course = courseRepository.findById(id)
+                .orElseThrow(() -> new CourseNotFoundException(id));
+                
+        log.info("Found course: {}", course.getTitle());
+        return courseMapper.toDto(course);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CourseDto> getAllCourses() {
+        log.info("Fetching all courses");
+        
+        List<CourseDto> courses = courseRepository.findAll()
                 .stream()
-                .map(this::mapToResponse)
+                .map(courseMapper::toDto)
                 .toList();
+                
+        log.info("Found {} courses", courses.size());
+        return courses;
     }
 
-    private CourseResponse mapToResponse(Course course) {
-        return new CourseResponse(
-                course.getId(),
-                course.getTitle(),
-                course.getDescription(),
-                course.getTeacherId()
-        );
-    }
+
 }
